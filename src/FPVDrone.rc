@@ -1,0 +1,39 @@
+// FPVDrone.dll resources: the encrypted assets and the version/credits block.
+#include "version.h"
+
+// The drone's and the goggles' runtime assets as one encrypted payload. build.bat first runs tools\pack
+// over Assets\ (generated from the 3DMA models by tools\prepare_assets.py, not in the repo): every asset
+// is AES-256-GCM encrypted with a per-build key, so the DLL holds no extractable PNG or OBJ
+// (src\payload.h).
+DATA RCDATA "build\\gen\\payload.bin"
+
+// Shown in the DLL's Properties > Details in Windows.
+1 VERSIONINFO
+FILEVERSION FPVDRONE_VERSION_NUM
+PRODUCTVERSION FPVDRONE_VERSION_NUM
+FILEFLAGSMASK 0x3F
+FILEFLAGS 0x0
+FILEOS 0x40004
+FILETYPE 0x2
+FILESUBTYPE 0x0
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName", "RemArrow"
+            VALUE "FileDescription", "FPV Drone - GML plugin for Geronimo"
+            VALUE "FileVersion", FPVDRONE_VERSION
+            VALUE "InternalName", "FPVDrone"
+            VALUE "OriginalFilename", "FPVDrone.dll"
+            VALUE "ProductName", "FPV Drone"
+            VALUE "ProductVersion", FPVDRONE_VERSION
+            VALUE "LegalCopyright", FPVDRONE_MODEL_CREDIT ". Plugin code by RemArrow."
+            VALUE "Comments", "Models: DJI Mini 4K and DJI Goggles 2 by 3DMA - 3D Military Assets. Not affiliated with or endorsed by 3DMA, DJI or Dark Matter Studios."
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

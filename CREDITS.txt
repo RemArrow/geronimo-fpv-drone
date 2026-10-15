@@ -1,0 +1,8 @@
+FPV Drone - GML plugin for Geronimo
+
+3D models and textures: "DJI Mini 4K" and "DJI Goggles 2" (with G24 mount) by 3DMA - 3D Military Assets
+  https://www.3dmilitaryassets.com
+  Used under license. They are built into FPVDrone.dll, encrypted, and may not be extracted from it or
+  redistributed.
+
+Plugin code by RemArrow. Not affiliated with or endorsed by 3DMA, DJI, Betaflight, HFM Games or Dark Matter Studios.
