@@ -40,7 +40,14 @@ rem A random key can, rarely, put a 4-byte signature the check looks for into th
 set TRIES=0
 :pack
 set /a TRIES+=1
-"%OUT%\pack.exe" "%ROOT%Assets" "%OUT%\gen\payload.bin" "%OUT%\gen\payload_key.h" && goto packed
+rem GML's runtime textures are always sampled as sRGB: pack a staged copy of Assets\ with the Normal and ORM maps
+rem sRGB-encoded (tools\srgb), so the shader reads them back linear. Assets\ itself stays linear.
+if exist "%OUT%\assets" rmdir /s /q "%OUT%\assets"
+robocopy "%ROOT%Assets" "%OUT%\assets" /MIR /NJH /NJS /NFL /NDL /NP >nul
+if errorlevel 8 exit /b 1
+dotnet build "%ROOT%tools\srgb\srgb.csproj" -c Release -o "%OUT%\srgb" --nologo -v q || exit /b 1
+dotnet "%OUT%\srgb\srgb.dll" "%OUT%\assets" || exit /b 1
+"%OUT%\pack.exe" "%OUT%\assets" "%OUT%\gen\payload.bin" "%OUT%\gen\payload_key.h" && goto packed
 if %TRIES% lss 5 goto pack
 exit /b 1
 :packed

@@ -15,3 +15,5 @@ Assets/
 *.spp
 *.mtl
 *.7z
+tools/srgb/bin/
+tools/srgb/obj/

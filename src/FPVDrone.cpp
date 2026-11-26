@@ -1144,7 +1144,8 @@ static bool IsDronePouch(Object actor) {
     GUObject* data = p ? *(GUObject**)(p + PouchDataOff()) : nullptr;
     if (!data) return false;
     bool ours = (s_pouchData && data == s_pouchData) || (data == GrenadePouch() && *(uint64_t*)(p + PouchColorOff()) == tag);
-    if (ours && actor.IsA("Pouch_C")) s_knownPouches.insert(actor.ptr);
+    // Vest pouches (Pouch_C) and kit-station pouches (EditablePouch_C) alike: the kit's camo recolours both.
+    if (ours) s_knownPouches.insert(actor.ptr);
     return ours;
 }
 // The host (or alone): our vest pouches marked "FPVDrone" again where the game recoloured them.
@@ -1238,6 +1239,13 @@ static void AddLook(Object a, Object at) {
 // The kit station's pouch for ours (the one you take and put on the vest) shows the drone where it will
 // hang instead of the grenade pouch, and a hand takes it by a box the drone's size.
 static void DressEditable(Object ep) {
+    if (ep && s_knownPouches.count(ep.ptr)) {  // a remembered one switched to another pouch is ours no more
+        GUObject* data = PouchDataOf(ep);
+        if (data && data != s_pouchData && data != GrenadePouch()) {
+            s_knownPouches.erase(ep.ptr);
+            std::erase(s_editables, ep.ptr);
+        }
+    }
     if (!ep || !IsDronePouch(ep) || std::find(s_editables.begin(), s_editables.end(), ep.ptr) != s_editables.end()) return;
     Object root = ep.GetObj("RootComponent");
     if (!root || !BuildAssets()) return;
@@ -1264,8 +1272,15 @@ static void BeforeKitSave() {
     s_savingPouches.clear();
     Object grenade = LoadObject(kGrenadePouch);
     for (GUObject* e : s_editables) {
-        if (!grenade || !Alive(e) || !s_pouchData || PouchDataOf(Object(e)) != s_pouchData) continue;  // (in the saved form already: as is)
+        if (!grenade || !Alive(e) || !s_pouchData) continue;
         uint8_t* p = (uint8_t*)Object(e).PropPtr("Data");
+        if (!p) continue;
+        if (*(GUObject**)(p + PouchDataOff()) == grenade.ptr) {  // in the saved form already, but the kit's camo may have recoloured it
+            *(uint64_t*)(p + PouchColorOff()) = API->MakeName(kPouchTag);
+            s_savingPouches.push_back(nullptr);  // counted, left as it is after
+            continue;
+        }
+        if (PouchDataOf(Object(e)) != s_pouchData) continue;
         *(GUObject**)(p + PouchDataOff()) = grenade.ptr;
         *(uint64_t*)(p + PouchColorOff()) = API->MakeName(kPouchTag);
         s_savingPouches.push_back(e);
@@ -1273,7 +1288,7 @@ static void BeforeKitSave() {
 }
 static void AfterKitSave() {
     for (GUObject* e : s_savingPouches) {
-        if (!Alive(e)) continue;
+        if (!e || !Alive(e)) continue;
         uint8_t* p = (uint8_t*)Object(e).PropPtr("Data");
         *(GUObject**)(p + PouchDataOff()) = s_pouchData;
         *(uint64_t*)(p + PouchColorOff()) = 0;
@@ -2780,7 +2795,46 @@ static bool s_scriptHooksOk = false, s_scriptHooksFailed = false;  // see "Bluep
 static void ResolveScriptHooks();
 static struct StoreOnDropAgain { GUObject* storable = nullptr; double in = 0; } s_storeOnDropAgain;  // FPV_Dev "drop away"
 
+// A level change (travel): the old world's actors and components are going, and every pointer kept to them with
+// them. WORLD_BEGIN_PLAY comes too late for the frames in between, and only on the host, so each tick first checks
+// the game state (every machine has one): while there is none, nothing runs; when it changes, every world object
+// this plugin keeps is dropped. (Before this, the tick read a dead world's objects during travel: GML caught an
+// access violation and turned the plugin's tick off for the rest of the session.)
+static bool LevelSettled() {
+    static GUObject* state = nullptr;
+    Params gs(Lib("GameplayStatics"), "GetGameState");
+    gs.SetObj("WorldContextObject", Object(API->WorldContext())).Call();
+    GUObject* now = gs.Return<GUObject*>();
+    if (now == state && now) return true;
+    if (state || now) {
+        // Only the old world's objects go. The new world's actors began play (and went through the hooks: kit-station
+        // pouches, vest pouches, the NVG) before this first tick saw its game state; clearing those too lost the drone
+        // pouches - a recoloured pouch no longer read as ours, so kits saved and vests loaded without the drone.
+        auto dead = [](GUObject* o) { return !Alive(o); };
+        if (!s_gog.actor || !Alive(s_gog.actor)) s_gog = Goggles{};
+        if (!s_drone.actor || !Alive(s_drone.actor)) {
+            GUObject* rt = s_drone.rt && API->IsValid(s_drone.rt) ? s_drone.rt : nullptr;  // the render target is not the world's
+            s_drone = Drone{};
+            s_drone.rt = rt;
+        }
+        std::erase_if(s_remote, [](const Drone& d) { return !Alive(d.actor); });
+        std::erase_if(s_parked, [](const Drone& d) { return !Alive(d.actor); });
+        std::erase_if(s_remoteGog, dead);
+        std::erase_if(s_editables, dead);
+        std::erase_if(s_knownPouches, dead);
+        s_savingPouches.clear();
+        s_booms.clear();
+        s_storeOnDropAgain = {};
+        s_filling = nullptr;
+        s_rightStick = false;
+        if (now) Log("level changed: world objects dropped");
+    }
+    state = now;
+    return now != nullptr;
+}
+
 static void Tick(double dt) {
+    if (!LevelSettled()) return;
     dt = Clamp(dt, 0, 1.0 / 20);
     static double checkT = 0, resolveT = 0;
     if ((checkT -= dt) <= 0) { checkT = 0.25; CheckGoggles(); }

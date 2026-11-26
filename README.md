@@ -452,3 +452,7 @@ The single-player test (`tests/FPVDroneDev`) gives the same results as 0.6.0.
   script, not by hand on the kit builder.
 - While you fly, the VR controllers still move you (VRSticks off) and hands raised in front of your face
   show through the goggles' black.
+
+## Shading fix (0.7.1)
+
+GML builds the plugin's textures at runtime, and the engine always samples those as sRGB. That's right for colour maps, but the normal and ORM maps are linear data. Read as sRGB, normals tilted (up to about 50 degrees on a flat map) and roughness came out far too low (0.55 read as 0.26), so surfaces looked glossy, washed out and wrongly lit. The build now packs a staged copy of `Assets\` with every `*_Normal.png` and `*_ORM.png` sRGB-encoded (`tools\srgb`), so the shader reads back the intended values. `Assets\` itself stays linear.
